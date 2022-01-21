@@ -1,84 +1,116 @@
-import React, { useEffect, useState} from 'react'
+import React, { createContext, useContext, useEffect, useState} from 'react'
 import ReactDom from 'react-dom'
 
 
+// init: object
 function createStore(init) {
-  let data = init
+  let state = init
   const eventTarget = new EventTarget()
 
   return {
     eventTarget: eventTarget,
 
     get() {
-      return data
+      return state
     },
 
-    update(newData) {
-      data = {
-        ...data,
-        ...newData
+    // newState: object
+    // state = { color: 'blue', text: 'hello' }
+    // set({ color: 'red' })
+    // -> { color: 'red', text: 'hello' }
+    set(newState) {
+      state = {
+        ...state,
+        ...newState
       }
 
       eventTarget.dispatchEvent(new CustomEvent('stateChanged', {
-        detail: data
+        detail: state
       }))
     }
   }
+} 
+
+const StoreContext = createContext()
+
+function StoreProvider(props) {
+  const [_store, setStore] = useState(props.store)
+
+  useEffect(() => {
+    function rerender(e) {
+      setStore({ ...props.store })
+    }
+
+    props.store.eventTarget.addEventListener('stateChanged', rerender)
+
+    return () => {
+      props.store.eventTarget.removeEventListener('stateChanged', rerender)
+    }
+  }, [])
+
+  return (
+    <StoreContext.Provider value={_store}>
+      { props.children}
+    </StoreContext.Provider>
+  ) 
 }
 
 
 function Module(props) {
-  const [color, setColor] = useState('black')
-
-  useEffect(() => {
-    function handleStateChanged(e) {
-      setColor(e.detail.color)
-    }
-
-    props.store.eventTarget.addEventListener('stateChanged', handleStateChanged)
-
-    return () => {
-      props.store.eventTarget.removeEventListener('stateChanged', handleStateChanged)
-    }
-  }, [])
-
-  function setColorInStore(color) {
-    props.store.update({ color: color })
-  }
+  const store = useContext(StoreContext)
 
   return (
     <div>
-      <h1 style={{ color: props.store.get().color }}>
+      <h1 style={{ color: store.get().color }}>
         Hello from module!
       </h1>
-      <button onClick={() => setColorInStore('green')}>Green</button>
-      <button onClick={() => setColorInStore('red')}>Red</button>
+      <SetColor />
+      <SayColor />
     </div>
   )
 }
 
+function SetColor() {
+  const store = useContext(StoreContext)
+  return (
+    <>
+      <button onClick={() => store.set({ color: 'green'})}>Green</button>
+      <button onClick={() => store.set({ color: 'red' })}>Red</button>
+    </>
+  )
+}
+
+function SayColor() {
+  const store = useContext(StoreContext)
+  return <h3>{store.get().color}</h3>
+}
 
 function createModule() {
+
   const store = createStore({
-    color: 'black'
+    color: 'hotpink'
   })
 
-  return {
-    mount(elem) {
-      ReactDom.render(<Module store={store} />, elem)
-    },
-    
-    unmount(elem) {
-      ReactDom.unmountComponentAtNode(elem)
-    },
-
-    setColor(color) {
-      store.update({ color: color })
-    }
+  function mount(elem) {
+    ReactDom.render(
+      <StoreProvider store={store}>
+        <Module store={store} />
+      </StoreProvider>,
+      elem
+    )
   }
+  
+  function unmount(elem) {
+    ReactDom.unmountComponentAtNode(elem)
+  }
+
+  function setColor(color) {
+    store.set({ color: color })
+  }
+
+  return { mount, unmount, setColor }
 }
 
 
 window.createModule = createModule
-
 window.createStore = createStore
